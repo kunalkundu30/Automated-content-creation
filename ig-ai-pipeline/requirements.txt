@@ -1,0 +1,9 @@
+google-api-python-client>=2.100
+google-auth>=2.30
+google-auth-httplib2>=0.2
+google-genai>=1.0
+google-cloud-texttospeech>=2.16
+requests>=2.31
+python-dotenv>=1.0
+praw>=7.7
+Pillow>=10.0

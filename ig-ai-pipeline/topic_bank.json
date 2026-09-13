@@ -1,0 +1,23 @@
+{
+  "pillars": [
+    "desk setups",
+    "small-space organization",
+    "budget home finds",
+    "quick life hacks"
+  ],
+  "seasonal_calendar": {
+    "January": "New Year reset & organization",
+    "February": "small-space Valentine's/date-night setups",
+    "March": "spring decluttering",
+    "April": "spring decluttering",
+    "May": "dorm & apartment move-in prep",
+    "June": "dorm & apartment move-in prep",
+    "July": "back-to-school desk & study setups",
+    "August": "back-to-school desk & study setups",
+    "September": "fall home refresh",
+    "October": "cozy small-space upgrades",
+    "November": "holiday gift guides",
+    "December": "holiday gift guides & year-end declutter"
+  },
+  "notes": "Edit the pillars and seasonal_calendar freely — generate_ideas.py reads this file fresh on every run, so changes take effect on the next scheduled run with no code changes needed."
+}

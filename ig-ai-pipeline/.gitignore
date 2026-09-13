@@ -1,0 +1,12 @@
+.env
+service-account.json
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+venv/
+audio/
+output/
+.last_run
+assets/videos/
+assets/images/
