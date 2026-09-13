@@ -40,8 +40,8 @@ from rich.table import Table  # noqa: E402
 import config  # noqa: E402
 import sheets_client  # noqa: E402
 
-# Use at least 120 cols so all table columns fit; expand for wider terminals.
-_MIN_WIDTH = 120
+# Use at least 150 cols so all table columns fit; expand for wider terminals.
+_MIN_WIDTH = 150
 _term_cols = shutil.get_terminal_size((_MIN_WIDTH, 24)).columns
 console = Console(width=max(_MIN_WIDTH, _term_cols))
 
@@ -68,21 +68,66 @@ _IG_BASE = f"{config.IG_GRAPH_API_BASE}/{config.IG_GRAPH_API_VERSION}"
 
 
 def _fetch_insights(media_id: str) -> dict:
-    """Call the Instagram Graph API for reach + saves on one post."""
-    url = f"{_IG_BASE}/{media_id}/insights"
-    params = {
-        "metric": "reach,saved",
-        "access_token": config.IG_ACCESS_TOKEN,
-    }
+    """Call the Instagram Graph API for reach, saves, shares, likes, comments
+    on one post. Reach/saves/shares come from the /insights endpoint;
+    likes/comments come from media fields.
+    """
     try:
-        resp = requests.get(url, params=params, timeout=20)
+        # Insights: reach, saves, shares
+        resp = requests.get(
+            f"{_IG_BASE}/{media_id}/insights",
+            params={
+                "metric": "reach,saved,shares",
+                "access_token": config.IG_ACCESS_TOKEN,
+            },
+            timeout=20,
+        )
         resp.raise_for_status()
         vals: dict[str, int] = {}
         for entry in resp.json().get("data", []):
             vals[entry["name"]] = entry["values"][0]["value"]
-        return {"reach": vals.get("reach", 0), "saves": vals.get("saved", 0)}
+
+        # Media fields: like_count, comments_count
+        fields_resp = requests.get(
+            f"{_IG_BASE}/{media_id}",
+            params={
+                "fields": "like_count,comments_count",
+                "access_token": config.IG_ACCESS_TOKEN,
+            },
+            timeout=20,
+        )
+        fields_resp.raise_for_status()
+        fields = fields_resp.json()
+
+        return {
+            "reach": vals.get("reach", 0),
+            "saves": vals.get("saved", 0),
+            "shares": vals.get("shares", 0),
+            "likes": fields.get("like_count", 0),
+            "comments": fields.get("comments_count", 0),
+        }
     except Exception as exc:  # noqa: BLE001
-        return {"reach": 0, "saves": 0, "error": str(exc)}
+        return {
+            "reach": 0, "saves": 0, "shares": 0,
+            "likes": 0, "comments": 0, "error": str(exc),
+        }
+
+
+def _fetch_followers() -> int | None:
+    """Fetch the current follower count for the IG business account."""
+    try:
+        resp = requests.get(
+            f"{_IG_BASE}/{config.IG_BUSINESS_ACCOUNT_ID}",
+            params={
+                "fields": "followers_count",
+                "access_token": config.IG_ACCESS_TOKEN,
+            },
+            timeout=20,
+        )
+        resp.raise_for_status()
+        return resp.json().get("followers_count")
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _refresh_insights(published_rows: list[dict]) -> None:
@@ -100,10 +145,16 @@ def _refresh_insights(published_rows: list[dict]) -> None:
         else:
             row["reach"] = result["reach"]
             row["saves"] = result["saves"]
+            row["shares"] = result["shares"]
+            row["likes"] = result["likes"]
+            row["comments"] = result["comments"]
             console.print(
                 f"  [{i}/{total}] {media_id}: "
                 f"reach=[yellow]{result['reach']:,}[/yellow]  "
-                f"saves=[magenta]{result['saves']:,}[/magenta]"
+                f"saves=[magenta]{result['saves']:,}[/magenta]  "
+                f"likes=[green]{result['likes']:,}[/green]  "
+                f"comments=[cyan]{result['comments']:,}[/cyan]  "
+                f"shares=[blue]{result['shares']:,}[/blue]"
             )
 
 
@@ -175,12 +226,15 @@ def _engagement_table(published_rows: list[dict]) -> Table:
         row_styles=["", "dim"],
     )
     tbl.add_column("#", width=3, justify="right", style="dim")
-    tbl.add_column("Pillar", min_width=22, no_wrap=True, style="bold")
-    tbl.add_column("Topic", min_width=30)
+    tbl.add_column("Pillar", min_width=20, no_wrap=True, style="bold")
+    tbl.add_column("Topic", min_width=24)
     tbl.add_column("Published", width=12, style="green")
     tbl.add_column("Asset", width=6, justify="center")
     tbl.add_column("Reach", width=9, justify="right", style="yellow")
     tbl.add_column("Saves", width=7, justify="right", style="magenta")
+    tbl.add_column("Likes", width=7, justify="right", style="green")
+    tbl.add_column("Comments", width=9, justify="right", style="cyan")
+    tbl.add_column("Shares", width=8, justify="right", style="blue")
     tbl.add_column("Save %", width=8, justify="right")
 
     def _save_pct(reach: int, saves: int) -> str:
@@ -189,8 +243,11 @@ def _engagement_table(published_rows: list[dict]) -> Table:
     for i, row in enumerate(published_rows, 1):
         reach = int(row.get("reach") or 0)
         saves = int(row.get("saves") or 0)
-        topic = (row.get("topic") or "")[:38]
-        if len(row.get("topic") or "") > 38:
+        likes = int(row.get("likes") or 0)
+        comments = int(row.get("comments") or 0)
+        shares = int(row.get("shares") or 0)
+        topic = (row.get("topic") or "")[:28]
+        if len(row.get("topic") or "") > 28:
             topic += "…"
         pub_date = (row.get("published_at") or "")[:10] or "—"
         asset_icon = "🎞" if row.get("asset_type") == "video" else "🖼"
@@ -203,6 +260,9 @@ def _engagement_table(published_rows: list[dict]) -> Table:
             asset_icon,
             f"{reach:,}",
             f"{saves:,}",
+            f"{likes:,}",
+            f"{comments:,}",
+            f"{shares:,}",
             _save_pct(reach, saves),
         )
     return tbl
@@ -213,10 +273,16 @@ def _pillar_table(published_rows: list[dict]) -> Table:
     for row in published_rows:
         p = row.get("pillar") or "Unknown"
         if p not in pillars:
-            pillars[p] = {"posts": 0, "reach": 0, "saves": 0}
+            pillars[p] = {
+                "posts": 0, "reach": 0, "saves": 0,
+                "likes": 0, "comments": 0, "shares": 0,
+            }
         pillars[p]["posts"] += 1
         pillars[p]["reach"] += int(row.get("reach") or 0)
         pillars[p]["saves"] += int(row.get("saves") or 0)
+        pillars[p]["likes"] += int(row.get("likes") or 0)
+        pillars[p]["comments"] += int(row.get("comments") or 0)
+        pillars[p]["shares"] += int(row.get("shares") or 0)
 
     tbl = Table(
         title="Engagement by Content Pillar",
@@ -224,11 +290,14 @@ def _pillar_table(published_rows: list[dict]) -> Table:
         header_style="bold cyan",
         title_style="bold",
     )
-    tbl.add_column("Pillar", style="bold", min_width=26, no_wrap=True)
+    tbl.add_column("Pillar", style="bold", min_width=22, no_wrap=True)
     tbl.add_column("Posts", justify="right", width=6)
-    tbl.add_column("Total Reach", justify="right", style="yellow", width=13)
-    tbl.add_column("Total Saves", justify="right", style="magenta", width=13)
-    tbl.add_column("Avg Reach/Post", justify="right", width=15)
+    tbl.add_column("Reach", justify="right", style="yellow", width=10)
+    tbl.add_column("Saves", justify="right", style="magenta", width=8)
+    tbl.add_column("Likes", justify="right", style="green", width=8)
+    tbl.add_column("Comments", justify="right", style="cyan", width=10)
+    tbl.add_column("Shares", justify="right", style="blue", width=9)
+    tbl.add_column("Avg Reach", justify="right", width=11)
     tbl.add_column("Save Rate", justify="right", width=10)
 
     for pillar, stats in sorted(
@@ -245,6 +314,9 @@ def _pillar_table(published_rows: list[dict]) -> Table:
             str(stats["posts"]),
             f"{stats['reach']:,}",
             f"{stats['saves']:,}",
+            f"{stats['likes']:,}",
+            f"{stats['comments']:,}",
+            f"{stats['shares']:,}",
             f"{avg:,}",
             rate,
         )
@@ -391,7 +463,7 @@ def _cost_table(all_rows: list[dict]) -> Table:
 # Engagement summary panel
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _summary_panel(published_rows: list[dict]) -> Panel:
+def _summary_panel(published_rows: list[dict], followers: int | None = None) -> Panel:
     if not published_rows:
         return Panel(
             "[dim]No published posts yet.[/dim]",
@@ -399,11 +471,12 @@ def _summary_panel(published_rows: list[dict]) -> Panel:
             border_style="dim",
         )
 
-    reaches = [int(r.get("reach") or 0) for r in published_rows]
-    saves = [int(r.get("saves") or 0) for r in published_rows]
+    total_reach = sum(int(r.get("reach") or 0) for r in published_rows)
+    total_saves = sum(int(r.get("saves") or 0) for r in published_rows)
+    total_likes = sum(int(r.get("likes") or 0) for r in published_rows)
+    total_comments = sum(int(r.get("comments") or 0) for r in published_rows)
+    total_shares = sum(int(r.get("shares") or 0) for r in published_rows)
 
-    total_reach = sum(reaches)
-    total_saves = sum(saves)
     avg_reach = total_reach // len(published_rows)
     save_rate = (
         f"{total_saves / total_reach * 100:.2f}%" if total_reach else "—"
@@ -411,27 +484,36 @@ def _summary_panel(published_rows: list[dict]) -> Panel:
 
     top_reach_row = max(published_rows, key=lambda r: int(r.get("reach") or 0))
     top_saves_row = max(published_rows, key=lambda r: int(r.get("saves") or 0))
+    top_likes_row = max(published_rows, key=lambda r: int(r.get("likes") or 0))
 
     def _topic(row: dict) -> str:
         t = (row.get("topic") or "")[:38]
         return t + ("…" if len(row.get("topic") or "") > 38 else "")
 
-    top_reach_val = int(top_reach_row.get("reach") or 0)
-    top_saves_val = int(top_saves_row.get("saves") or 0)
+    followers_str = f"{followers:,}" if followers is not None else "[dim]run with --refresh[/dim]"
 
     lines = [
+        f"  [bold cyan]Followers[/bold cyan]         {followers_str:>10}",
+        "",
         f"  [bold yellow]Total Reach[/bold yellow]       {total_reach:>10,}",
         f"  [bold magenta]Total Saves[/bold magenta]       {total_saves:>10,}",
+        f"  [bold green]Total Likes[/bold green]       {total_likes:>10,}",
+        f"  [bold cyan]Total Comments[/bold cyan]    {total_comments:>10,}",
+        f"  [bold blue]Total Shares[/bold blue]      {total_shares:>10,}",
         f"  [bold]Avg Reach / Post[/bold]  {avg_reach:>10,}",
         f"  [bold]Overall Save Rate[/bold] {save_rate:>10}",
         "",
         (
-            f"  [bold yellow]Top Reach[/bold yellow]  "
-            f"{top_reach_val:,}  —  {_topic(top_reach_row)}"
+            f"  [bold yellow]Top Reach[/bold yellow]   "
+            f"{int(top_reach_row.get('reach') or 0):,}  —  {_topic(top_reach_row)}"
         ),
         (
-            f"  [bold magenta]Top Saves[/bold magenta]  "
-            f"{top_saves_val:,}  —  {_topic(top_saves_row)}"
+            f"  [bold magenta]Top Saves[/bold magenta]   "
+            f"{int(top_saves_row.get('saves') or 0):,}  —  {_topic(top_saves_row)}"
+        ),
+        (
+            f"  [bold green]Top Likes[/bold green]   "
+            f"{int(top_likes_row.get('likes') or 0):,}  —  {_topic(top_likes_row)}"
         ),
     ]
     return Panel(
@@ -476,6 +558,7 @@ def main() -> None:
     console.print(f"  Loaded [bold]{len(all_rows)}[/bold] rows from queue.\n")
 
     published_rows = [r for r in all_rows if r.get("status") == "published"]
+    followers: int | None = None
 
     if args.refresh:
         if published_rows:
@@ -489,6 +572,12 @@ def main() -> None:
             console.print(
                 "  [dim]No published posts — --refresh skipped.[/dim]\n"
             )
+        console.print("  [cyan]Fetching follower count…[/cyan]")
+        followers = _fetch_followers()
+        if followers is not None:
+            console.print(f"  Followers: [bold cyan]{followers:,}[/bold cyan]\n")
+        else:
+            console.print("  [yellow]Could not fetch follower count.[/yellow]\n")
 
     # 1. Pipeline status
     console.print(_pipeline_status_table(all_rows))
@@ -504,7 +593,7 @@ def main() -> None:
         console.print()
 
         # 4. Summary panel
-        console.print(_summary_panel(published_rows))
+        console.print(_summary_panel(published_rows, followers=followers))
         console.print()
     else:
         console.print(

@@ -93,6 +93,9 @@ COLUMNS = [
     "published_at",
     "reach",
     "saves",
+    "likes",
+    "comments",
+    "shares",
 ]
 
 # How many un-published rows to keep queued up at all times. When the count

@@ -219,10 +219,16 @@ def _handle_published(row: dict, row_num: int) -> None:
     sheets_client.update_row(row_num, {
         "reach": metrics["reach"],
         "saves": metrics["saves"],
+        "likes": metrics["likes"],
+        "comments": metrics["comments"],
+        "shares": metrics["shares"],
     })
     print(
         f"Row {row_num}: logged {metrics['reach']} reach"
-        f" / {metrics['saves']} saves."
+        f" / {metrics['saves']} saves"
+        f" / {metrics['likes']} likes"
+        f" / {metrics['comments']} comments"
+        f" / {metrics['shares']} shares."
     )
 
 
