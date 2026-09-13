@@ -1,0 +1,64 @@
+name: Run content pipeline
+
+on:
+  schedule:
+    - cron: "0 0 * * *"     # once daily at midnight UTC
+  workflow_dispatch: {}      # lets you trigger a run manually from the Actions tab
+
+permissions:
+  contents: write   # needed to create/update the pipeline-media release
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ig-ai-pipeline
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: sudo apt-get install -y ffmpeg fonts-liberation
+        working-directory: ${{ github.workspace }}
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore assembled video cache
+        uses: actions/cache@v4
+        with:
+          path: ig-ai-pipeline/output
+          key: assembled-videos-${{ github.run_id }}
+          restore-keys: assembled-videos-
+
+      - name: Write service account key from secret
+        run: echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}' > service-account.json
+
+      - name: Run pipeline
+        env:
+          GOOGLE_SERVICE_ACCOUNT_FILE: service-account.json
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          SHEET_TAB_NAME: ${{ secrets.SHEET_TAB_NAME }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          IG_BUSINESS_ACCOUNT_ID: ${{ secrets.IG_BUSINESS_ACCOUNT_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python main.py
+
+      # Keeps the repo "active" so GitHub doesn't auto-disable the schedule
+      # after 60 days of no commits.
+      - name: Record last run
+        run: |
+          date -u > .last_run
+          git config user.name "pipeline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add .last_run
+          git diff --quiet --cached || git commit -m "chore: record pipeline run"
+          git push
+        working-directory: ${{ github.workspace }}
