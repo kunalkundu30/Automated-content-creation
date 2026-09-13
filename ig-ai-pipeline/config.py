@@ -44,6 +44,13 @@ IG_GRAPH_API_VERSION = "v21.0"
 # not graph.facebook.com
 IG_GRAPH_API_BASE = "https://graph.instagram.com"
 
+# Optional — YouTube Data API v3 key for trending-video signal in idea
+# generation. Enable "YouTube Data API v3" in the same Google Cloud project,
+# create an API key restricted to that API. 10 000 quota units/day free;
+# this pipeline uses ~100 units per content pillar per run.
+# Leave blank and the YouTube signal is silently skipped.
+YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")
+
 # Optional — Reddit research signal. Leave blank and the pipeline skips it
 # cleanly. See pipeline/reddit_research.py for the ToS scope this is limited to.
 REDDIT_CLIENT_ID = os.environ.get("REDDIT_CLIENT_ID", "")
@@ -91,3 +98,7 @@ COLUMNS = [
 # How many un-published rows to keep queued up at all times. When the count
 # drops below this, generate_ideas.py tops it back up automatically.
 IDEA_BUFFER_SIZE = int(os.environ.get("IDEA_BUFFER_SIZE", "10"))
+
+# Number of images generated per row by Pollinations.AI (free, no API key).
+# More images = longer slideshow variety; 4 is a good default for a ~30s reel.
+IMAGE_COUNT = int(os.environ.get("IMAGE_COUNT", "4"))

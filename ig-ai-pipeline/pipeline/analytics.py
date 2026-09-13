@@ -9,7 +9,7 @@ import requests
 
 import config
 
-_BASE_URL = f"https://graph.facebook.com/{config.IG_GRAPH_API_VERSION}"
+_BASE_URL = f"{config.IG_GRAPH_API_BASE}/{config.IG_GRAPH_API_VERSION}"
 
 
 def fetch_insights(media_id: str) -> dict:

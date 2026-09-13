@@ -36,18 +36,34 @@ def build_video(
     """Assembles the video, uploads it to a GitHub Release for public access,
     and returns the permanent browser_download_url. A local copy is kept in
     ig-ai-pipeline/output/ for inspection.
+
+    `images_folder_id` may be either:
+      - A local directory path (from generate_images.generate_images_locally)
+        — files are used directly and the directory is deleted after assembly.
+      - A Google Drive folder ID (for video rows where the user uploads clips)
+        — files are downloaded from Drive.
     """
     os.makedirs(_OUTPUT_DIR, exist_ok=True)
     work_dir = f"/tmp/video_{row_id}_{uuid.uuid4().hex[:8]}"
     os.makedirs(work_dir, exist_ok=True)
+    local_images_dir = images_folder_id if os.path.isdir(images_folder_id) else None
 
     try:
-        assets = drive_client.download_folder_files(
-            images_folder_id, f"{work_dir}/assets"
-        )
+        if local_images_dir:
+            # Images already on disk — use them directly (sorted for slideshow order)
+            all_files = sorted(os.listdir(local_images_dir))
+            assets = [
+                os.path.join(local_images_dir, f)
+                for f in all_files
+                if not f.startswith(".")
+            ]
+        else:
+            assets = drive_client.download_folder_files(
+                images_folder_id, f"{work_dir}/assets"
+            )
         if not assets:
             raise RuntimeError(
-                f"No visual assets found in Drive folder {images_folder_id}"
+                f"No visual assets found in {images_folder_id}"
             )
 
         total_duration = _get_duration(voice_audio_path)
@@ -68,6 +84,8 @@ def build_video(
         return github_storage.upload_video(final_path, filename)
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
+        if local_images_dir:
+            shutil.rmtree(local_images_dir, ignore_errors=True)
 
 
 def _get_duration(path: str) -> float:
@@ -170,22 +188,60 @@ def _load_font(size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.load_default()
 
 
+_CAPTION_SIDE_MARGIN = 60   # px kept clear on each side of the frame
+_CAPTION_BOX_PAD = 20       # px between text and its background box
+
+
+def _wrap_text(text: str, draw: ImageDraw.ImageDraw,
+               font: ImageFont.FreeTypeFont, max_width: int) -> str:
+    """Word-wraps text so no line exceeds max_width pixels. Returns the
+    wrapped string with newlines inserted at word boundaries.
+    """
+    words = text.split()
+    lines: list[str] = []
+    current: list[str] = []
+    for word in words:
+        test = " ".join(current + [word])
+        w = draw.textbbox((0, 0), test, font=font)[2]
+        if w <= max_width or not current:
+            # Fits on current line, or it's a single word wider than the frame
+            current.append(word)
+        else:
+            lines.append(" ".join(current))
+            current = [word]
+    if current:
+        lines.append(" ".join(current))
+    return "\n".join(lines)
+
+
 def _make_caption_image(text: str, out_path: str) -> None:
     """Renders white text with a semi-transparent black box onto a transparent
     canvas the same size as the output frame, then saves it as RGBA PNG.
+    Text is word-wrapped to stay within safe margins so it never bleeds past
+    the video edges.
     """
     img = Image.new("RGBA", (_WIDTH, _HEIGHT), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     font = _load_font(64)
 
-    bbox = draw.textbbox((0, 0), text, font=font)
+    max_text_width = _WIDTH - (_CAPTION_SIDE_MARGIN + _CAPTION_BOX_PAD) * 2
+    wrapped = _wrap_text(text, draw, font, max_text_width)
+
+    bbox = draw.multiline_textbbox(
+        (0, 0), wrapped, font=font, spacing=8, align="center"
+    )
     tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
     x = (_WIDTH - tw) // 2
     y = _HEIGHT - 400 - th
-    pad = 20
-    draw.rectangle([x - pad, y - pad, x + tw + pad, y + th + pad],
-                   fill=(0, 0, 0, 128))
-    draw.text((x, y), text, font=font, fill="white")
+
+    draw.rectangle(
+        [x - _CAPTION_BOX_PAD, y - _CAPTION_BOX_PAD,
+         x + tw + _CAPTION_BOX_PAD, y + th + _CAPTION_BOX_PAD],
+        fill=(0, 0, 0, 128),
+    )
+    draw.multiline_text(
+        (x, y), wrapped, font=font, fill="white", spacing=8, align="center"
+    )
     img.save(out_path, "PNG")
 
 

@@ -1,0 +1,92 @@
+{
+  "small-space organization": {
+    "name": "Maya",
+    "created_at": "2026-09-13",
+    "last_evolved": "2026-09-13",
+    "visual": {
+      "age_range": "late 20s",
+      "build": "slender build, average height",
+      "hair": "warm honey-brown, soft curtain bangs, shoulder-length subtle waves",
+      "skin_tone": "light-medium with warm golden undertones",
+      "distinguishing_features": "soft natural freckles across the bridge of the nose, delicate silver huggie hoop earrings",
+      "style_baseline": "relaxed neutral ribbed long-sleeve, high-waisted oat linen trousers, clean white leather sneakers"
+    },
+    "personality": {
+      "core_traits": [
+        "approachable",
+        "methodical",
+        "encouraging"
+      ],
+      "content_voice": "Warm, reassuring, and practical, speaking directly to camera like a non-judgmental friend sharing realistic home tips.",
+      "target_demographic": "Urban renters and studio apartment dwellers aged 22-35 seeking clever, aesthetically pleasing storage solutions."
+    },
+    "style_context_rules": "Clothing adapts to the content scene (e.g. cosy knitwear for winter content, gym-adjacent for productivity posts) while face, hair, and distinguishing features remain identical across every asset.",
+    "evolution_log": [
+      {
+        "date": "2026-09-13",
+        "change": "initial creation",
+        "reason": "new pillar"
+      }
+    ]
+  },
+  "budget home finds": {
+    "name": "Maya",
+    "created_at": "2026-09-13",
+    "last_evolved": "2026-09-13",
+    "visual": {
+      "age_range": "late 20s",
+      "build": "average height, slim build",
+      "hair": "warm honey brown, shoulder-length soft waves with light curtain bangs",
+      "skin_tone": "light olive skin tone with a natural glow",
+      "distinguishing_features": "expressive almond-shaped hazel eyes, tiny gold huggie earrings, natural full brows",
+      "style_baseline": "relaxed neutral ribbed tank, oversized cream linen shirt, high-waisted trousers, dainty gold necklace"
+    },
+    "personality": {
+      "core_traits": [
+        "approachable",
+        "resourceful",
+        "enthusiastic"
+      ],
+      "content_voice": "Warm, genuine, and encouraging, speaking directly to the camera like a savvy friend sharing an insider home deal.",
+      "target_demographic": "Millennials and Gen Z renters, students, and first-time homeowners looking for affordable, aesthetic home styling and organization hacks."
+    },
+    "style_context_rules": "Clothing adapts to the content scene (e.g. cosy knitwear for winter content, gym-adjacent for productivity posts) while face, hair, and distinguishing features remain identical across every asset.",
+    "evolution_log": [
+      {
+        "date": "2026-09-13",
+        "change": "initial creation",
+        "reason": "new pillar"
+      }
+    ]
+  },
+  "quick life hacks": {
+    "name": "Maya",
+    "created_at": "2026-09-13",
+    "last_evolved": "2026-09-13",
+    "visual": {
+      "age_range": "late-20s",
+      "build": "average height, athletic slim build",
+      "hair": "dark honey brown, shoulder-length loose waves with a middle part",
+      "skin_tone": "warm olive tone with a natural subtle glow",
+      "distinguishing_features": "faint smattering of freckles across the nose bridge, small gold huggie earrings",
+      "style_baseline": "minimalist neutrals, ribbed crewneck tops, high-waisted denim, delicate gold chain"
+    },
+    "personality": {
+      "core_traits": [
+        "approachable",
+        "resourceful",
+        "enthusiastic"
+      ],
+      "content_voice": "Upbeat, clear, and encouraging, delivering quick tips with a bright, direct-to-camera smile that feels like an insightful friend sharing an everyday shortcut.",
+      "target_demographic": "Busy young professionals, university students, and renters aged 20\u201335 looking for smart home, productivity, and organization hacks."
+    },
+    "style_context_rules": "Clothing adapts to the content scene (e.g. cosy knitwear for winter content, gym-adjacent for productivity posts) while face, hair, and distinguishing features remain identical across every asset.",
+    "evolution_log": [
+      {
+        "date": "2026-09-13",
+        "change": "initial creation",
+        "reason": "new pillar"
+      }
+    ]
+  }
+}

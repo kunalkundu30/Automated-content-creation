@@ -28,18 +28,36 @@ def upload_file(local_path: str, filename: str, folder_id: str, make_public: boo
     file_metadata = {"name": filename, "parents": [folder_id]}
     media = MediaFileUpload(local_path)
     uploaded = _service.files().create(
-        body=file_metadata, media_body=media, fields="id, webViewLink"
+        body=file_metadata,
+        media_body=media,
+        fields="id, webViewLink",
+        supportsAllDrives=True,
     ).execute()
 
     result = {"id": uploaded["id"], "web_view_link": uploaded["webViewLink"], "direct_url": None}
 
     if make_public:
         _service.permissions().create(
-            fileId=uploaded["id"], body={"role": "reader", "type": "anyone"}
+            fileId=uploaded["id"],
+            body={"role": "reader", "type": "anyone"},
+            supportsAllDrives=True,
         ).execute()
         result["direct_url"] = f"https://drive.google.com/uc?export=download&id={uploaded['id']}"
 
     return result
+
+
+def create_folder(name: str, parent_folder_id: str) -> str:
+    """Creates a subfolder inside parent_folder_id and returns its Drive ID."""
+    metadata = {
+        "name": name,
+        "mimeType": "application/vnd.google-apps.folder",
+        "parents": [parent_folder_id],
+    }
+    folder = _service.files().create(
+        body=metadata, fields="id", supportsAllDrives=True
+    ).execute()
+    return folder["id"]
 
 
 def download_folder_files(folder_id: str, dest_dir: str) -> list[str]:
@@ -49,13 +67,20 @@ def download_folder_files(folder_id: str, dest_dir: str) -> list[str]:
     """
     os.makedirs(dest_dir, exist_ok=True)
     query = f"'{folder_id}' in parents and trashed = false"
-    response = _service.files().list(q=query, fields="files(id, name)").execute()
+    response = _service.files().list(
+        q=query,
+        fields="files(id, name)",
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True,
+    ).execute()
     files = sorted(response.get("files", []), key=lambda f: f["name"])
 
     local_paths = []
     for file in files:
         local_path = os.path.join(dest_dir, file["name"])
-        request = _service.files().get_media(fileId=file["id"])
+        request = _service.files().get_media(
+            fileId=file["id"], supportsAllDrives=True
+        )
         with open(local_path, "wb") as f:
             downloader = MediaIoBaseDownload(f, request)
             done = False

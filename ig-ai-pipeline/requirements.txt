@@ -7,3 +7,4 @@ requests>=2.31
 python-dotenv>=1.0
 praw>=7.7
 Pillow>=10.0
+rich>=13.0

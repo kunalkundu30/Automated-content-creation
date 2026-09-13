@@ -5,12 +5,16 @@ in the exact status it expects, so a row never gets processed twice the same
 way.
 
 Row lifecycle:
-    idea -> drafted -> [drafted, waiting on assets] -> ready -> qa_passed
-    -> published
+    idea -> drafted -> ready -> qa_passed -> published
 
-Manual steps: fill in asset_type ("image" or "video") to trigger prompt
-generation, then create assets using that prompt, upload to Drive, and paste
-the folder ID into images_folder_id. Everything else is automatic.
+For image rows: fill in asset_type="image" to trigger automatic prompt
+generation and image creation via Pollinations.AI (free, no API key, no Drive
+upload needed). The pipeline generates images locally, synthesises voice,
+assembles the video, and moves the row to ready — all in one run.
+
+For video rows: fill in asset_type="video" to generate a prompt, then create
+the clip manually (e.g. Kling web credits), upload to Drive, and paste the
+folder ID into images_folder_id. The next run finishes assembly automatically.
 """
 import os
 import uuid
@@ -21,8 +25,10 @@ import github_storage
 import sheets_client
 from pipeline import (
     analytics,
+    avatar_manager,
     generate_content,
     generate_ideas,
+    generate_images,
     generate_voice,
     assemble_video,
     publish_instagram,
@@ -69,7 +75,9 @@ def _top_up_ideas(rows: list[dict]) -> None:
         return
 
     recent_topics = [r["topic"] for r in rows[-50:] if r.get("topic")]
-    new_ideas = generate_ideas.generate_ideas(shortfall, recent_topics)
+    new_ideas = generate_ideas.generate_ideas(
+        shortfall, recent_topics, all_rows=rows
+    )
     if not new_ideas:
         print("Idea generation returned nothing — leaving queue as-is.")
         return
@@ -86,8 +94,21 @@ def _top_up_ideas(rows: list[dict]) -> None:
 
 
 def _handle_idea(row: dict, row_num: int) -> None:
+    pillar = row.get("pillar", "")
+    # Fetch (or lazily create) the avatar so its content_language can be used
+    # when generating the caption and script. If avatar creation fails, fall
+    # back gracefully to English rather than blocking the entire idea stage.
+    avatar = None
+    if pillar:
+        try:
+            avatar = avatar_manager.get_or_create_avatar(pillar)
+        except Exception as exc:
+            print(
+                f"Row {row_num}: avatar fetch failed ({exc}), "
+                "using English."
+            )
     result = generate_content.generate_caption_and_script(
-        row["topic"], row["pillar"]
+        row["topic"], pillar, avatar=avatar
     )
     sheets_client.update_row(row_num, {
         "caption": result["caption"],
@@ -98,29 +119,52 @@ def _handle_idea(row: dict, row_num: int) -> None:
 
 
 def _handle_drafted(row: dict, row_num: int) -> None:
-    # Auto-generate asset prompt as soon as user fills in asset_type
     asset_type = row.get("asset_type", "").strip().lower()
-    if asset_type and not row.get("asset_prompt"):
+    pillar = row.get("pillar", "")
+
+    # Load (or create) the avatar for this pillar. Creation is lazy: the first
+    # time a pillar reaches the drafted stage, Gemini generates the character
+    # definition and saves it to avatar_bank.json for all future runs.
+    avatar = avatar_manager.get_or_create_avatar(pillar) if pillar else None
+
+    # Step 1: Generate asset prompt as soon as asset_type is filled in.
+    asset_prompt = row.get("asset_prompt", "")
+    if asset_type and not asset_prompt:
         asset_prompt = generate_content.generate_asset_prompt(
             topic=row["topic"],
-            pillar=row["pillar"],
+            pillar=pillar,
             caption=row["caption"],
             script=row["script"],
             asset_type=asset_type,
+            avatar=avatar,
         )
         sheets_client.update_row(row_num, {"asset_prompt": asset_prompt})
         print(f"Row {row_num}: generated {asset_type} prompt.")
 
-    if not row.get("images_folder_id"):
-        return  # waiting on assets folder ID
     if row.get("video_path"):
         return  # already assembled, leave it
 
+    # Step 2: Resolve image source.
+    # Image rows: generate locally via Pollinations.AI (free, no Drive needed).
+    # Video rows: user pastes Drive folder ID manually (no free video API).
+    if asset_type == "image" and asset_prompt:
+        images_source = generate_images.generate_images_locally(
+            prompt=asset_prompt,
+            row_id=row["id"],
+            avatar=avatar,
+        )
+        print(f"Row {row_num}: auto-generated images locally.")
+    else:
+        images_source = row.get("images_folder_id", "")
+        if not images_source:
+            return  # video row still waiting on manual Drive folder ID
+
+    # Step 3: Assemble video.
     voice_result = generate_voice.generate_voiceover_with_timing(
-        row["script"], row["id"]
+        row["script"], row["id"], avatar=avatar
     )
     video_url = assemble_video.build_video(
-        images_folder_id=row["images_folder_id"],
+        images_folder_id=images_source,
         voice_audio_path=voice_result["local_audio_path"],
         caption_chunks=voice_result["caption_chunks"],
         row_id=row["id"],

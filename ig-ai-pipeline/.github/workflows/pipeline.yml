@@ -2,7 +2,7 @@ name: Run content pipeline
 
 on:
   schedule:
-    - cron: "0 */6 * * *"   # every 6 hours — adjust to your posting cadence
+    - cron: "0 0 * * *"     # once daily at midnight UTC
   workflow_dispatch: {}      # lets you trigger a run manually from the Actions tab
 
 permissions:
